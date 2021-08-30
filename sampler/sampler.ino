@@ -1,12 +1,22 @@
 #define ENCODER_OPTIMIZE_INTERRUPTS
 
 #include <SPI.h>
-#include <SD.h>
-#define SD_ChipSelectPin 4
+#include <SdFat.h>
+#include <sdios.h>
 #include <TMRpcm.h>
 
 #include <SoftwareSerial.h>
 #include <Encoder.h>
+
+//SDFAT
+#define SD_FAT_TYPE 1
+#define SPI_CLOCK SD_SCK_MHZ(50)
+const uint8_t SD_CS_PIN = 4;
+#define SD_CONFIG SdSpiConfig(SD_CS_PIN, DEDICATED_SPI, SPI_CLOCK)
+
+SdFat32 sd;
+File32 file;
+File32 root;
 
 TMRpcm tmrpcm;
 
@@ -48,8 +58,9 @@ void setup()
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
-  Serial.print("Initializing SD card...");
-  if (!SD.begin(SD_ChipSelectPin)) {
+  Serial.println("Initializing SD card...");
+  // Initialize the SD card.
+  if (!sd.begin(SD_CONFIG)) {
     Serial.println("initialization failed!");
     while (1);
   }
@@ -62,7 +73,10 @@ void setup()
 
   knob_pos = knob.read();
 
-  File root = SD.open("/");
+  if (!root.open("/")) {
+    Serial.println("failed to open root");
+    while (1);
+  }
   total_tracks = getDirectoryFilesCount(root);
   root.close();
 
@@ -98,6 +112,7 @@ void loop()
 
   if(should_play){
     getCurrentAudioFile(track_number);
+    Serial.println(current_track);
     tmrpcm.play(current_track);
   }
 }
@@ -135,19 +150,13 @@ int prevTrack(int current, int total) {
   return total;
 }
 
-int getDirectoryFilesCount(File dir) {
+int getDirectoryFilesCount(File32 dir) {
   int count = 0;
-  while (true) {
-    File entry =  dir.openNextFile();
-    if (! entry) {
-      // no more files
-      break;
-    }
-
-    if (!entry.isDirectory()) {
+  while (file.openNext(&dir, O_RDONLY)) {
+    if (!file.isHidden()) {
       count++;
     }
-    entry.close();
+    file.close();
   }
   return count;
 }
