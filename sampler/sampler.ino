@@ -1,9 +1,9 @@
-#define ENCODER_OPTIMIZE_INTERRUPTS
+// #define ENCODER_OPTIMIZE_INTERRUPTS
 
-#include <SPI.h>
 #include <SdFat.h>
 #include <sdios.h>
 #include <TMRpcm.h>
+#include <SPI.h>
 
 #include <SoftwareSerial.h>
 #include <Encoder.h>
@@ -15,8 +15,6 @@ const uint8_t SD_CS_PIN = 4;
 #define SD_CONFIG SdSpiConfig(SD_CS_PIN, DEDICATED_SPI, SPI_CLOCK)
 
 SdFat32 sd;
-File32 file;
-File32 root;
 
 TMRpcm tmrpcm;
 
@@ -58,10 +56,11 @@ void setup()
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
-  Serial.println("Initializing SD card...");
+  Serial.println(F("Initializing SD card..."));
+  
   // Initialize the SD card.
   if (!sd.begin(SD_CONFIG)) {
-    Serial.println("initialization failed!");
+    errorPrint();
     while (1);
   }
   
@@ -73,14 +72,15 @@ void setup()
 
   knob_pos = knob.read();
 
+  File32 root;
   if (!root.open("/")) {
-    Serial.println("failed to open root");
+    Serial.println(F("failed to open root"));
     while (1);
   }
   total_tracks = getDirectoryFilesCount(root);
   root.close();
 
-  Serial.println("initialization done.");
+  Serial.println(F("initialization done."));
 }
 
 
@@ -91,11 +91,11 @@ void loop()
   // check if encoder position has updated
   ENCODER_DELTA delta = getEncoderDelta(knob.read());
   if(delta == FWD){
-    Serial.println("FORWARD");
+    // Serial.println(F("FORWARD"));
     track_number = nextTrack(track_number, total_tracks);
     should_play = true;
   } else if (delta == BACK){
-    Serial.println("BACK");
+    // Serial.println(F("BACK"));
     track_number = prevTrack(track_number, total_tracks);
     should_play = true;
   }
@@ -103,7 +103,6 @@ void loop()
   //  check for button press
   int new_state = digitalRead(trigger_pin);
   if(new_state != trigger_state){
-    Serial.println(new_state);
     if(new_state == HIGH){
       should_play = true;
     }
@@ -138,19 +137,20 @@ int nextTrack(int current, int total) {
   if(current < total){
     return current + 1;
   }
-  return 0;
+  return 1;
 }
 
 // Returns the previous track index.
 // Will cycle back to the last/end if at the first track
 int prevTrack(int current, int total) {
-  if(current > 0){
+  if(current > 1){
     return current - 1;
   }
   return total;
 }
 
 int getDirectoryFilesCount(File32 dir) {
+  File32 file;
   int count = 0;
   while (file.openNext(&dir, O_RDONLY)) {
     if (!file.isHidden()) {
@@ -163,4 +163,13 @@ int getDirectoryFilesCount(File32 dir) {
 
 void getCurrentAudioFile(int idx){
   sprintf(current_track, "drum%d.wav", idx);
+}
+
+void errorPrint() {
+  if (sd.sdErrorCode()) {
+    Serial.print(F("SD errorCode: "));
+    Serial.println(int(sd.sdErrorCode()));
+    Serial.print(F("SD errorData: "));
+    Serial.println(int(sd.sdErrorData()));
+  }
 }
